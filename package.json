@@ -11,7 +11,9 @@
   },
   "dependencies": {
     "@google/genai": "^1.38.0",
+    "@tailwindcss/vite": "^4.2.1",
     "@types/express": "^5.0.6",
+    "autoprefixer": "^10.4.27",
     "express": "^5.2.1",
     "leaflet": "1.9.4",
     "leaflet-geosearch": "3.11.0",
@@ -21,6 +23,7 @@
     "react-leaflet": "4.2.1",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
+    "tailwindcss": "^4.2.1",
     "tsx": "^4.21.0"
   },
   "devDependencies": {
