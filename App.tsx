@@ -44,7 +44,11 @@ const icons = {
 
 const fetchAddressAI = async (lat: number, lng: number): Promise<string> => {
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || apiKey === 'undefined') {
+      throw new Error("API Key Gemini belum diatur di environment variables.");
+    }
+    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: "Apa alamat lengkap dan nama tempat/jalan yang paling mendekati koordinat ini? Berikan jawaban singkat (maksimal 10 kata) yang langsung menunjukkan nama jalan atau lokasi.",
@@ -127,52 +131,112 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    const newSocket = io();
-    setSocket(newSocket);
+    const backendUrl = import.meta.env.VITE_BACKEND_URL;
+    let newSocket: Socket | null = null;
 
-    // Fetch initial data
-    fetch('/api/initial-data')
-      .then(res => res.json())
-      .then(data => {
-        setReports(data.reports);
-        setNotifications(data.notifications);
+    // Only attempt socket connection if a backend URL is explicitly provided
+    // or if we are in a development environment that we know has a backend.
+    const shouldConnectSocket = backendUrl || window.location.hostname === 'localhost' || window.location.hostname.includes('run.app');
+
+    if (shouldConnectSocket) {
+      newSocket = io(backendUrl || '', {
+        reconnectionAttempts: 3,
+        timeout: 5000,
+        autoConnect: true,
+        transports: ['websocket', 'polling']
+      });
+      setSocket(newSocket);
+    }
+
+    // Initial data loading with LocalStorage fallback
+    const loadInitialData = async () => {
+      try {
+        // If no backend URL and not on a known backend host, skip fetch to avoid HTML-as-JSON error
+        if (!shouldConnectSocket) {
+          throw new Error('No backend configured for this environment');
+        }
+
+        const res = await fetch(`${backendUrl || ''}/api/initial-data`);
+        if (!res.ok) throw new Error('Backend not available');
+        
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('Server returned non-JSON response (likely HTML fallback)');
+        }
+        
+        const data = await res.json();
+        setReports(data.reports || []);
+        setNotifications(data.notifications || []);
+        
+        localStorage.setItem('reports_backup', JSON.stringify(data.reports || []));
+        localStorage.setItem('notifications_backup', JSON.stringify(data.notifications || []));
+      } catch (err) {
+        console.log("Using local storage fallback (Backend unavailable or static host)");
+        const savedReports = localStorage.getItem('reports_backup');
+        const savedNotifs = localStorage.getItem('notifications_backup');
+        if (savedReports) setReports(JSON.parse(savedReports));
+        if (savedNotifs) setNotifications(JSON.parse(savedNotifs));
+      }
+    };
+
+    loadInitialData();
+
+    if (newSocket) {
+      // Listen for events
+      newSocket.on('report:created', (report) => {
+        setReports(prev => {
+          if (prev.find(r => r.id === report.id)) return prev;
+          const updated = [report, ...prev];
+          localStorage.setItem('reports_backup', JSON.stringify(updated));
+          return updated;
+        });
       });
 
-    // Listen for events
-    newSocket.on('report:created', (report) => {
-      setReports(prev => {
-        if (prev.find(r => r.id === report.id)) return prev;
-        return [report, ...prev];
+      newSocket.on('report:updated', (report) => {
+        setReports(prev => {
+          const updated = prev.map(r => r.id === report.id ? report : r);
+          localStorage.setItem('reports_backup', JSON.stringify(updated));
+          return updated;
+        });
       });
-    });
 
-    newSocket.on('report:updated', (report) => {
-      setReports(prev => prev.map(r => r.id === report.id ? report : r));
-    });
-
-    newSocket.on('report:deleted', (id) => {
-      setReports(prev => prev.filter(r => r.id !== id));
-    });
-
-    newSocket.on('notification:created', (notif) => {
-      setNotifications(prev => {
-        if (prev.find(n => n.id === notif.id)) return prev;
-        return [notif, ...prev];
+      newSocket.on('report:deleted', (id) => {
+        setReports(prev => {
+          const updated = prev.filter(r => r.id !== id);
+          localStorage.setItem('reports_backup', JSON.stringify(updated));
+          return updated;
+        });
       });
-    });
 
-    newSocket.on('notification:updated', (id) => {
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
-    });
+      newSocket.on('notification:created', (notif) => {
+        setNotifications(prev => {
+          if (prev.find(n => n.id === notif.id)) return prev;
+          const updated = [notif, ...prev];
+          localStorage.setItem('notifications_backup', JSON.stringify(updated));
+          return updated;
+        });
+      });
 
-    newSocket.on('notification:cleared', (userId) => {
-      setNotifications(prev => prev.filter(n => n.userId !== userId));
-    });
+      newSocket.on('notification:updated', (id) => {
+        setNotifications(prev => {
+          const updated = prev.map(n => n.id === id ? { ...n, read: true } : n);
+          localStorage.setItem('notifications_backup', JSON.stringify(updated));
+          return updated;
+        });
+      });
+
+      newSocket.on('notification:cleared', (userId) => {
+        setNotifications(prev => {
+          const updated = prev.filter(n => n.userId !== userId);
+          localStorage.setItem('notifications_backup', JSON.stringify(updated));
+          return updated;
+        });
+      });
+    }
 
     const hasSeen = localStorage.getItem('hasSeenOnboarding');
     if (!hasSeen) setShowOnboarding(true);
 
-    // Get user location on mount
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -188,7 +252,7 @@ const App: React.FC = () => {
     }
 
     return () => {
-      newSocket.close();
+      if (newSocket) newSocket.close();
     };
   }, []);
 
@@ -204,26 +268,38 @@ const App: React.FC = () => {
       timestamp: Date.now(),
       read: false
     };
-    if (socket) {
+    if (socket && socket.connected) {
       socket.emit('notification:create', newNotif);
     } else {
-      setNotifications(prev => [newNotif, ...prev]);
+      setNotifications(prev => {
+        const updated = [newNotif, ...prev];
+        localStorage.setItem('notifications_backup', JSON.stringify(updated));
+        return updated;
+      });
     }
   };
 
   const handleMarkNotifRead = (id: string) => {
-    if (socket) {
+    if (socket && socket.connected) {
       socket.emit('notification:mark-read', id);
     } else {
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+      setNotifications(prev => {
+        const updated = prev.map(n => n.id === id ? { ...n, read: true } : n);
+        localStorage.setItem('notifications_backup', JSON.stringify(updated));
+        return updated;
+      });
     }
   };
 
   const handleClearNotifications = () => {
-    if (socket) {
+    if (socket && socket.connected) {
       socket.emit('notification:clear-all', currentUser.id);
     } else {
-      setNotifications(prev => prev.filter(n => n.userId !== currentUser.id));
+      setNotifications(prev => {
+        const updated = prev.filter(n => n.userId !== currentUser.id);
+        localStorage.setItem('notifications_backup', JSON.stringify(updated));
+        return updated;
+      });
     }
   };
 
@@ -283,10 +359,14 @@ const App: React.FC = () => {
       reporterId: currentUser.id
     };
 
-    if (socket) {
+    if (socket && socket.connected) {
       socket.emit('report:create', newReport);
     } else {
-      setReports((prev) => [newReport, ...prev]);
+      setReports((prev) => {
+        const updated = [newReport, ...prev];
+        localStorage.setItem('reports_backup', JSON.stringify(updated));
+        return updated;
+      });
     }
     setIsFormOpen(false);
     setTempLocation(null);
@@ -303,12 +383,14 @@ const App: React.FC = () => {
 
     const address = await fetchAddressAI(newReport.lat, newReport.lng);
     const finalReport = { ...newReport, address };
-    if (socket) {
+    if (socket && socket.connected) {
       socket.emit('report:update', finalReport);
     } else {
-      setReports((prev) => prev.map(r => 
-        r.id === tempId ? finalReport : r
-      ));
+      setReports((prev) => {
+        const updated = prev.map(r => r.id === tempId ? finalReport : r);
+        localStorage.setItem('reports_backup', JSON.stringify(updated));
+        return updated;
+      });
     }
   };
 
@@ -339,10 +421,14 @@ const App: React.FC = () => {
     }
 
     const updatedReport = { ...report, ...updates };
-    if (socket) {
+    if (socket && socket.connected) {
       socket.emit('report:update', updatedReport);
     } else {
-      setReports((prev) => prev.map(r => r.id === id ? updatedReport : r));
+      setReports((prev) => {
+        const updated = prev.map(r => r.id === id ? updatedReport : r);
+        localStorage.setItem('reports_backup', JSON.stringify(updated));
+        return updated;
+      });
     }
   };
 
@@ -387,10 +473,14 @@ const App: React.FC = () => {
       isVerifiedByCurrentUser: !isVerified
     };
 
-    if (socket) {
+    if (socket && socket.connected) {
       socket.emit('report:update', updatedReport);
     } else {
-      setReports((prev) => prev.map(r => r.id === id ? updatedReport : r));
+      setReports((prev) => {
+        const updated = prev.map(r => r.id === id ? updatedReport : r);
+        localStorage.setItem('reports_backup', JSON.stringify(updated));
+        return updated;
+      });
     }
   };
 
@@ -410,10 +500,14 @@ const App: React.FC = () => {
       comments: [...(report.comments || []), newComment]
     };
 
-    if (socket) {
+    if (socket && socket.connected) {
       socket.emit('report:update', updatedReport);
     } else {
-      setReports((prev) => prev.map(r => r.id === reportId ? updatedReport : r));
+      setReports((prev) => {
+        const updated = prev.map(r => r.id === reportId ? updatedReport : r);
+        localStorage.setItem('reports_backup', JSON.stringify(updated));
+        return updated;
+      });
     }
   };
 
@@ -432,10 +526,14 @@ const App: React.FC = () => {
   };
 
   const handleDeleteReport = (id: string) => {
-    if (socket) {
+    if (socket && socket.connected) {
       socket.emit('report:delete', id);
     } else {
-      setReports((prev) => prev.filter(r => r.id !== id));
+      setReports((prev) => {
+        const updated = prev.filter(r => r.id !== id);
+        localStorage.setItem('reports_backup', JSON.stringify(updated));
+        return updated;
+      });
     }
     addNotification({
       userId: currentUser.id,
