@@ -44,18 +44,17 @@ const icons = {
 
 const fetchAddressAI = async (lat: number, lng: number): Promise<string> => {
   try {
-    // Check both process.env (for AI Studio) and import.meta.env (for Vite/Cloudflare)
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
     
     if (!apiKey || apiKey === 'undefined') {
-      console.warn("Gemini API Key not found. Falling back to coordinates.");
       return `Lokasi: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
     }
     
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: "Apa alamat lengkap dan nama tempat/jalan yang paling mendekati koordinat ini? Berikan jawaban singkat (maksimal 10 kata) yang langsung menunjukkan nama jalan atau lokasi.",
+      // Explicitly including coordinates in the text prompt for better reliability
+      contents: `Koordinat: ${lat}, ${lng}. Apa alamat lengkap atau nama jalan yang paling mendekati titik ini? Berikan jawaban singkat (maksimal 10 kata) yang langsung menunjukkan nama lokasi.`,
       config: {
         tools: [{ googleMaps: {} }],
         toolConfig: {
@@ -127,11 +126,24 @@ const App: React.FC = () => {
     distance: 5 // Default 5km
   });
   
-  // USER STATE
-  const [currentUser, setCurrentUser] = useState<AppUser>({
-    id: 'developer_id',
-    name: 'Developer Mode',
-    role: 'developer'
+  // USER STATE - Default to 'user' for public stand mode
+  const [currentUser, setCurrentUser] = useState<AppUser>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const isDevMode = params.get('dev') === 'true';
+    
+    if (isDevMode) {
+      return {
+        id: 'dev_' + Math.random().toString(36).substr(2, 9),
+        name: 'Developer Master',
+        role: 'developer'
+      };
+    }
+    
+    return {
+      id: 'user_' + Math.random().toString(36).substr(2, 9),
+      name: 'Warga Bandung',
+      role: 'user'
+    };
   });
 
   useEffect(() => {
