@@ -44,10 +44,14 @@ const icons = {
 
 const fetchAddressAI = async (lat: number, lng: number): Promise<string> => {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    // Check both process.env (for AI Studio) and import.meta.env (for Vite/Cloudflare)
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    
     if (!apiKey || apiKey === 'undefined') {
-      throw new Error("API Key Gemini belum diatur di environment variables.");
+      console.warn("Gemini API Key not found. Falling back to coordinates.");
+      return `Lokasi: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
     }
+    
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -134,18 +138,27 @@ const App: React.FC = () => {
     const backendUrl = import.meta.env.VITE_BACKEND_URL;
     let newSocket: Socket | null = null;
 
-    // Only attempt socket connection if a backend URL is explicitly provided
-    // or if we are in a development environment that we know has a backend.
-    const shouldConnectSocket = backendUrl || window.location.hostname === 'localhost' || window.location.hostname.includes('run.app');
+    // Strict backend detection: Only connect if backendUrl is set, 
+    // or if we are in a known development environment.
+    // On static hosts like Cloudflare Pages, hostname won't match these unless VITE_BACKEND_URL is set.
+    const isDevEnv = window.location.hostname === 'localhost' || 
+                     window.location.hostname.includes('127.0.0.1') ||
+                     window.location.hostname.includes('run.app') ||
+                     window.location.hostname.includes('aistudio-preview');
+    
+    const shouldConnectSocket = !!backendUrl || isDevEnv;
 
     if (shouldConnectSocket) {
+      console.log("Attempting to connect to backend:", backendUrl || 'current origin');
       newSocket = io(backendUrl || '', {
-        reconnectionAttempts: 3,
-        timeout: 5000,
+        reconnectionAttempts: 5,
+        timeout: 10000,
         autoConnect: true,
         transports: ['websocket', 'polling']
       });
       setSocket(newSocket);
+    } else {
+      console.log("Running in static/offline mode (No backend configured)");
     }
 
     // Initial data loading with LocalStorage fallback
@@ -153,29 +166,45 @@ const App: React.FC = () => {
       try {
         // If no backend URL and not on a known backend host, skip fetch to avoid HTML-as-JSON error
         if (!shouldConnectSocket) {
-          throw new Error('No backend configured for this environment');
+          throw new Error('Static host: skipping backend fetch');
         }
 
         const res = await fetch(`${backendUrl || ''}/api/initial-data`);
-        if (!res.ok) throw new Error('Backend not available');
+        if (!res.ok) throw new Error(`Backend error: ${res.status}`);
         
         const contentType = res.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('Server returned non-JSON response (likely HTML fallback)');
+          throw new Error('Server returned non-JSON response');
         }
         
         const data = await res.json();
-        setReports(data.reports || []);
-        setNotifications(data.notifications || []);
-        
-        localStorage.setItem('reports_backup', JSON.stringify(data.reports || []));
-        localStorage.setItem('notifications_backup', JSON.stringify(data.notifications || []));
+        if (data.reports) {
+          setReports(data.reports);
+          localStorage.setItem('reports_backup', JSON.stringify(data.reports));
+        }
+        if (data.notifications) {
+          setNotifications(data.notifications);
+          localStorage.setItem('notifications_backup', JSON.stringify(data.notifications));
+        }
       } catch (err) {
-        console.log("Using local storage fallback (Backend unavailable or static host)");
+        console.log("Data loading info:", err instanceof Error ? err.message : "Unknown error");
+        console.log("Loading from LocalStorage fallback...");
         const savedReports = localStorage.getItem('reports_backup');
         const savedNotifs = localStorage.getItem('notifications_backup');
-        if (savedReports) setReports(JSON.parse(savedReports));
-        if (savedNotifs) setNotifications(JSON.parse(savedNotifs));
+        if (savedReports) {
+          try {
+            setReports(JSON.parse(savedReports));
+          } catch (e) {
+            console.error("Error parsing saved reports", e);
+          }
+        }
+        if (savedNotifs) {
+          try {
+            setNotifications(JSON.parse(savedNotifs));
+          } catch (e) {
+            console.error("Error parsing saved notifications", e);
+          }
+        }
       }
     };
 
@@ -365,12 +394,17 @@ const App: React.FC = () => {
       setReports((prev) => {
         const updated = [newReport, ...prev];
         localStorage.setItem('reports_backup', JSON.stringify(updated));
+        console.log("Report saved to LocalStorage (Offline mode)");
         return updated;
       });
     }
     setIsFormOpen(false);
     setTempLocation(null);
     setFlyToPosition({ lat: newReport.lat, lng: newReport.lng });
+
+    // Show Thank You Bar immediately
+    setShowThankYou(true);
+    setTimeout(() => setShowThankYou(false), 4000);
 
     // Notify government of new report
     addNotification({
@@ -381,8 +415,10 @@ const App: React.FC = () => {
       relatedReportId: tempId
     });
 
+    // Fetch real address using AI
     const address = await fetchAddressAI(newReport.lat, newReport.lng);
     const finalReport = { ...newReport, address };
+    
     if (socket && socket.connected) {
       socket.emit('report:update', finalReport);
     } else {
