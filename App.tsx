@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import { Plus, X, ChevronRight, ChevronLeft, HelpCircle, CheckCircle, Clock, Trophy } from 'lucide-react';
+import { Plus, X, ChevronRight, ChevronLeft, HelpCircle, CheckCircle, Clock, Trophy, Trash2 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { io, Socket } from 'socket.io-client';
 

@@ -24,11 +24,11 @@ export const ProfileMenu: React.FC<ProfileMenuProps> = ({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
 
-  const roles: { role: UserRole; label: string; icon: any; color: string }[] = [
+  const roles: { role: UserRole; label: string; icon: any; color: string }[] = ([
     { role: 'user', label: 'Warga', icon: User, color: 'text-gray-600' },
     { role: 'government', label: 'Pemerintah', icon: Shield, color: 'text-blue-600' },
     { role: 'developer', label: 'Developer', icon: Code, color: 'text-purple-600' },
-  ];
+  ] as const).filter(r => r.role !== 'developer' || currentUser.role === 'developer') as any;
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
