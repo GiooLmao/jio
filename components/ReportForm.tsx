@@ -86,29 +86,10 @@ export const ReportForm: React.FC<ReportFormProps> = ({ lat, lng, onClose, onSub
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Contextual Geofencing Check
+  // 1. Contextual Geofencing Check - REMOVED for Stand Mode flexibility
   useEffect(() => {
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const userLat = position.coords.latitude;
-          const userLng = position.coords.longitude;
-          setUserLocation({ lat: userLat, lng: userLng });
-          
-          const dist = getDistance(userLat, userLng, lat, lng);
-          if (dist > 500) {
-            setDistanceError(`Lokasi Anda terlalu jauh (${Math.round(dist)}m) dari titik laporan. Harap melapor di lokasi kejadian.`);
-          }
-          setIsLocating(false);
-        },
-        (error) => {
-          console.error("GPS Error", error);
-          setIsLocating(false);
-        }
-      );
-    } else {
-      setIsLocating(false);
-    }
+    setIsLocating(false);
+    // We no longer block users based on their physical distance
   }, [lat, lng]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

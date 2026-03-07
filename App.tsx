@@ -344,6 +344,16 @@ const App: React.FC = () => {
     }
   };
 
+  const handleResetAllData = () => {
+    if (window.confirm('Hapus semua laporan dan notifikasi secara permanen?')) {
+      setReports([]);
+      setNotifications([]);
+      localStorage.removeItem('reports_backup');
+      localStorage.removeItem('notifications_backup');
+      alert('Semua data telah dibersihkan.');
+    }
+  };
+
   const handleSwitchRole = (role: UserRole) => {
     const names = {
       user: 'Warga Bandung',
@@ -666,6 +676,16 @@ const App: React.FC = () => {
           onClearAllNotifications={handleClearNotifications}
           onNotificationClick={handleNotificationClick}
         />
+        {currentUser.role === 'developer' && (
+          <button 
+            onClick={handleResetAllData}
+            className="bg-red-500 hover:bg-red-600 text-white p-3 rounded-2xl shadow-xl border border-red-400/30 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 group"
+            title="Reset Semua Data"
+          >
+            <Trash2 size={20} className="group-hover:rotate-12 transition-transform" />
+            <span className="text-xs font-bold hidden md:block">Reset Data</span>
+          </button>
+        )}
       </div>
 
       {/* Sidebar Toggle */}
