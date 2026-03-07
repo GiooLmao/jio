@@ -47,15 +47,15 @@ const fetchAddressAI = async (lat: number, lng: number): Promise<string> => {
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
     
     if (!apiKey || apiKey === 'undefined') {
-      return `Lokasi: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
     }
     
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      // Explicitly including coordinates in the text prompt for better reliability
-      contents: `Koordinat: ${lat}, ${lng}. Apa alamat lengkap atau nama jalan yang paling mendekati titik ini? Berikan jawaban singkat (maksimal 10 kata) yang langsung menunjukkan nama lokasi.`,
+      contents: `Koordinat: ${lat}, ${lng}. Berikan nama jalan atau tempat terdekat.`,
       config: {
+        systemInstruction: "Anda adalah asisten pencari alamat. Tugas Anda hanya memberikan nama jalan atau lokasi singkat (maksimal 8 kata). JANGAN memberikan kalimat penjelasan, JANGAN meminta maaf, dan JANGAN memberikan alasan jika tidak ditemukan. Jika lokasi tidak ditemukan, cukup berikan koordinatnya saja.",
         tools: [{ googleMaps: {} }],
         toolConfig: {
           retrievalConfig: {
@@ -67,10 +67,25 @@ const fetchAddressAI = async (lat: number, lng: number): Promise<string> => {
         }
       },
     });
-    return response.text?.trim() || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+
+    const result = response.text?.trim() || "";
+    
+    // Filter out "I'm sorry" or "Not found" style responses
+    const lowerResult = result.toLowerCase();
+    if (
+      lowerResult.includes("maaf") || 
+      lowerResult.includes("tidak ditemukan") || 
+      lowerResult.includes("sorry") || 
+      lowerResult.includes("not found") ||
+      result.length > 100
+    ) {
+      return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    }
+
+    return result || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
   } catch (error) {
     console.error("AI Address Fetch Error:", error);
-    return `Lokasi: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
   }
 };
 
