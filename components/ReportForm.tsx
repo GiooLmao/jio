@@ -25,7 +25,8 @@ const CATEGORIES: ReportCategoryData[] = [
       { id: 'pothole', label: 'Jalan Berlubang' },
       { id: 'streetlight', label: 'Lampu Jalan Mati' },
       { id: 'sidewalk', label: 'Trotoar Rusak' },
-      { id: 'signage', label: 'Rambu Lalu Lintas' }
+      { id: 'signage', label: 'Rambu Lalu Lintas' },
+      { id: 'cable', label: 'Kabel Menjuntai' }
     ]
   },
   {
@@ -34,7 +35,18 @@ const CATEGORIES: ReportCategoryData[] = [
     subCategories: [
       { id: 'trash', label: 'Tumpukan Sampah' },
       { id: 'flood', label: 'Banjir / Genangan' },
-      { id: 'tree', label: 'Pohon Tumbang' }
+      { id: 'tree', label: 'Pohon Tumbang' },
+      { id: 'drainage', label: 'Saluran Air Mampet' }
+    ]
+  },
+  {
+    id: 'order',
+    label: 'Ketertiban Umum',
+    subCategories: [
+      { id: 'parking', label: 'Parkir Liar' },
+      { id: 'vendor', label: 'PKL Mengganggu' },
+      { id: 'animal', label: 'Hewan Liar / Terlantar' },
+      { id: 'crime', label: 'Keamanan / Kriminalitas' }
     ]
   },
   {
@@ -43,7 +55,8 @@ const CATEGORIES: ReportCategoryData[] = [
     subCategories: [
       { id: 'playground', label: 'Taman Bermain' },
       { id: 'bench', label: 'Bangku Taman' },
-      { id: 'bus_stop', label: 'Halte Bus' }
+      { id: 'bus_stop', label: 'Halte Bus' },
+      { id: 'toilet', label: 'Toilet Publik Rusak' }
     ]
   },
   {

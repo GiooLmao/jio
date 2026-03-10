@@ -62,6 +62,7 @@ export const ReportSidebar: React.FC<ReportSidebarProps> = ({
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [flaggingId, setFlaggingId] = useState<string | null>(null);
   const [reportToDelete, setReportToDelete] = useState<string | null>(null);
+  const [customFlagReason, setCustomFlagReason] = useState('');
 
   const reportRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -100,10 +101,14 @@ export const ReportSidebar: React.FC<ReportSidebarProps> = ({
   };
 
   const handleFlagSubmit = (id: string, reason: string) => {
+    const finalReason = reason === 'other' ? customFlagReason : reason;
+    if (!finalReason.trim()) return;
+    
     if (onFlagReport) {
-      onFlagReport(id, reason);
+      onFlagReport(id, finalReason);
     }
     setFlaggingId(null);
+    setCustomFlagReason('');
   };
 
   const hasAccessToStatus = currentUser.role === 'government' || currentUser.role === 'developer';
@@ -113,7 +118,7 @@ export const ReportSidebar: React.FC<ReportSidebarProps> = ({
       {/* Flag Reason Modal (Mini) */}
       {flaggingId && (
         <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-[20] flex items-center justify-center p-6">
-          <div className="bg-white w-full rounded-2xl shadow-2xl border border-gray-100 p-5 animate-scale-in">
+          <div className="bg-white w-full rounded-2xl shadow-2xl border border-gray-100 p-5 animate-scale-in max-h-[90%] overflow-y-auto">
             <h4 className="text-sm font-bold text-gray-900 mb-3">Laporkan Konten?</h4>
             <div className="space-y-2">
               {['Trolling / Spam', 'Kata Kasar', 'Foto Tidak Pantas', 'Lokasi Palsu'].map(reason => (
@@ -125,9 +130,30 @@ export const ReportSidebar: React.FC<ReportSidebarProps> = ({
                   {reason}
                 </button>
               ))}
+              
+              <div className="pt-2 border-t border-gray-100">
+                <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">Lainnya</p>
+                <textarea 
+                  value={customFlagReason}
+                  onChange={(e) => setCustomFlagReason(e.target.value)}
+                  placeholder="Sebutkan alasan lainnya..."
+                  className="w-full p-3 text-xs border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-400 outline-none resize-none bg-gray-50 mb-2"
+                  rows={2}
+                />
+                <button 
+                  onClick={() => handleFlagSubmit(flaggingId, 'other')}
+                  disabled={!customFlagReason.trim()}
+                  className="w-full py-2.5 bg-red-500 text-white rounded-xl text-xs font-bold disabled:bg-gray-300 transition-all shadow-sm"
+                >
+                  Kirim Laporan
+                </button>
+              </div>
             </div>
             <button 
-              onClick={() => setFlaggingId(null)}
+              onClick={() => {
+                setFlaggingId(null);
+                setCustomFlagReason('');
+              }}
               className="w-full mt-4 py-2 text-xs font-bold text-gray-400 hover:text-gray-600 transition-colors"
             >
               Batal
